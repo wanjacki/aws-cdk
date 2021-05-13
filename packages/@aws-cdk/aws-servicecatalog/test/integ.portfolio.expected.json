@@ -1,0 +1,57 @@
+{
+    "Resources": {
+      "TestRole6C9272DF": {
+        "Type": "AWS::IAM::Role",
+        "Properties": {
+          "AssumeRolePolicyDocument": {
+            "Statement": [
+              {
+                "Action": "sts:AssumeRole",
+                "Effect": "Allow",
+                "Principal": {
+                  "AWS": {
+                    "Fn::Join": [
+                      "",
+                      [
+                        "arn:",
+                        {
+                          "Ref": "AWS::Partition"
+                        },
+                        ":iam::",
+                        {
+                          "Ref": "AWS::AccountId"
+                        },
+                        ":root"
+                      ]
+                    ]
+                  }
+                }
+              }
+            ],
+            "Version": "2012-10-17"
+          }
+        }
+      },
+      "TestPortfolio4AC794EB": {
+        "Type": "AWS::ServiceCatalog::Portfolio",
+        "Properties": {
+          "DisplayName": "TestPortfolio",
+          "ProviderName": "TestProvider"
+      }
+    },
+    "TestPortfolioPortfolioPrincipalAssociation7F3391C8": {
+        "Type": "AWS::ServiceCatalog::PortfolioPrincipalAssociation",
+        "Properties": {
+          "PortfolioId": {"Ref": "TestPortfolio4AC794EB"},
+          "PrincipalType": "IAM",
+          "PrincipalARN":{
+            "Fn::GetAtt": [
+              "TestRole6C9272DF",
+              "Arn"
+            ]
+          }
+        }
+    }
+     
+}
+}

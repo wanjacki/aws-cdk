@@ -1,10 +1,12 @@
 /* eslint-disable */
-
 import * as iam from '@aws-cdk/aws-iam';
 import { IResource, Resource } from '@aws-cdk/core';
 import { Construct } from 'constructs';
 import { CfnPortfolio, CfnPortfolioPrincipalAssociation } from './servicecatalog.generated';
 
+/**
+ * A Service Catalog portfolio
+ */
 export interface IPortfolio extends IResource {
 
   /**
@@ -15,66 +17,58 @@ export interface IPortfolio extends IResource {
   readonly id: string;
 
   /**
-   * The name of the portfolio
-   *
+   * The name of the portfolio 
+   * 
    * @attribute
    */
   readonly portfolioName: string;
 
   /**
-   * Grant read permissions for this stream and its contents to an IAM
+   * Associate portfolio with a principal
    * principal (Role/Group/User).
-   *
-   * If an encryption key is used, permission to ues the key to decrypt the
-   * contents of the stream will also be granted.
    */
   associatePrincipal(principal: iam.IRole): void;
-
-
 }
 
 
 /**
- * A reference to a stream. The easiest way to instantiate is to call
- * `stream.export()`. Then, the consumer can use `Stream.import(this, ref)` and
- * get a `Stream`.
+ * A reference to a portfolio
  */
 export interface PortfolioAttributes {
   /**
-  * The ARN of the stream.
+  * The name of the portfolo.
   */
   readonly portfolioName: string;
 }
 
 /**
-* Represents a Kinesis Stream.
+* Represents a Service Catalog portfolio.
 */
 abstract class PortfolioBase extends Resource implements IPortfolio {
 
   /**
-  * The name of the stream
+  * The id of the portfolio
   */
   public abstract readonly id: string;
 
   /**
-  * The name of the stream
+  * The name of the portfolio
   */
   public abstract readonly portfolioName: string;
 
 
   /**
-  * Grant write permissions for this stream and its contents to an IAM
-  * principal (Role/Group/User).
+  * Associate a principal with the portfolio
   *
-  * If an encryption key is used, permission to ues the key to decrypt the
-  * contents of the stream will also be granted.
   */
   public abstract associatePrincipal(principal: iam.IRole): void;    
+
+
  
 }
 
   /**
- * Properties for a Kinesis Stream
+ * Properties for a Portfolio
  */
 export interface PortfolioProps {
     /**
@@ -82,6 +76,9 @@ export interface PortfolioProps {
      * @default <generated>
      */
     readonly displayName: string;
+
+
+  
   
     /**
      * The number of hours for the data records that are stored in shards to remain accessible.
@@ -108,7 +105,7 @@ export interface PortfolioProps {
   }
 
   /**
- * A Kinesis stream. Can be encrypted with a KMS key.
+ * A Service Catalog portfolio
  */
 export class Portfolio extends PortfolioBase {
   
@@ -116,6 +113,7 @@ export class Portfolio extends PortfolioBase {
     public readonly id: string;
   
     private readonly portfolio: CfnPortfolio;
+
   
     constructor(scope: Construct, id: string, props: PortfolioProps) {
       super(scope, id, {
@@ -140,5 +138,6 @@ export class Portfolio extends PortfolioBase {
         principalType: 'IAM'
     })
    }
+
   }
 
