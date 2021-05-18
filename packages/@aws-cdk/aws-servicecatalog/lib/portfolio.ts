@@ -112,7 +112,7 @@ export interface PortfolioProps {
 
   /**
      * The accept language
-     * @default - AcceptLanguage.EN 
+     * @default - AcceptLanguage.EN
      */
   readonly acceptLanguage?: AcceptLanguage;
 
@@ -179,17 +179,16 @@ export class Portfolio extends PortfolioBase {
     super(scope, id, {
       physicalName: props.displayName,
     });
+    
 
     const acceptLanguage = this.parseAcceptLanguage(props);
-
-    
 
     this.portfolio = new CfnPortfolio(this, 'Resource', {
       displayName: props.displayName,
       providerName: props.providerName,
       description: props.description,
       tags: props.tags,
-      acceptLanguage: props.acceptLanguage
+      acceptLanguage: acceptLanguage,
     });
 
     this.portfolioArn = this.getResourceArnAttribute(this.portfolio.ref, {
@@ -198,31 +197,21 @@ export class Portfolio extends PortfolioBase {
       resourceName: this.physicalName,
     });
 
-    
-
     this.portfolioName = this.getResourceNameAttribute(props.displayName);
     this.id = this.getResourceNameAttribute(this.portfolio.ref);
 
-
   }
 
-
-  private parseAcceptLanguage(props: PortfolioProps): AcceptLanguage
-    {
-
-      if (!props.acceptLanguage){
-        return AcceptLanguage.EN
-      }
-      if (props.acceptLanguage == AcceptLanguage.EN) {
-        return AcceptLanguage.EN;
-      } else if (props.acceptLanguage == AcceptLanguage.JP) {
-        return AcceptLanguage.JP;
-      } else if (props.acceptLanguage == AcceptLanguage.ZH) {
-        return AcceptLanguage.ZH;
-      } else {
-        throw new Error(`Unexpected 'acceptLanguage': ${props.acceptLanguage}`);
-      }
+  private parseAcceptLanguage(props: PortfolioProps) {
+    if (props.acceptLanguage == undefined) {
+      return undefined
     }
+    if (props.acceptLanguage in AcceptLanguage) {
+    return props.acceptLanguage;
+    } else {
+      throw new Error(`Unexpected 'acceptLanguage': ${props.acceptLanguage}`);
+    }
+  }
 
 
 }

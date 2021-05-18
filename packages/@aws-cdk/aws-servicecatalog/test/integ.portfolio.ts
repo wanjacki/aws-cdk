@@ -1,7 +1,8 @@
 import * as iam from '@aws-cdk/aws-iam';
-import * as sc from '@aws-cdk/aws-servicecatalog';
+// import * as sc from '@aws-cdk/aws-servicecatalog';
 import { App, Stack } from '@aws-cdk/core';
 import { Portfolio, Product } from '../lib';
+import { CfnCloudFormationProduct } from '../lib/servicecatalog.generated';
 
 const app = new App();
 const stack = new Stack(app, 'integ-servicecatalog-portfolio');
@@ -17,23 +18,22 @@ const portfolio = new Portfolio(stack, 'TestPortfolio', {
 
 
 const product = new Product(stack, 'TestProduct', {
-  name: "TestProduct",
-  owner: "Test Owner",
-  provisioningArtifacts: [{templateUrl:'www.s3.yaml'}]
+  name: 'TestProduct',
+  owner: 'Test Owner',
+  provisioningArtifacts: [{ templateUrl: 'www.s3.yaml' }],
 });
 
 
-
-const l1product = new sc.CfnCloudFormationProduct(stack, 'TestL1Product', {
+const l1product = new CfnCloudFormationProduct(stack, 'TestL1Product', {
   name: 'Testl1Product',
   owner: 'Test Owner',
   provisioningArtifactParameters: [
     {
       info: {
-        LoadTemplateFromURL: 'www.s3.yaml'
-      }
-    }
-  ]
+        LoadTemplateFromURL: 'www.s3.yaml',
+      },
+    },
+  ],
 });
 
 
