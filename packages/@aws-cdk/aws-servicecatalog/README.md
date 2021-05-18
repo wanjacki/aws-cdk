@@ -21,4 +21,22 @@
 
 <!--END STABILITY BANNER-->
 
-This module is part of the [AWS Cloud Development Kit](https://github.com/aws/aws-cdk) project.
+[AWS Service Catalog](https://docs.aws.amazon.com/servicecatalog/latest/dg/what-is-service-catalog.html) enables organizatiions to create
+and manage catalogs of products that are approved for use on AWS
+
+## Table Of Contents
+
+- [Portfolio](#portfolio)
+  <!-- - [Associations](#association) -->
+
+## Portfolio
+
+AWS Service Catalog portfolios allow admins to manage products that their end users have access to
+Using the CDK, a new portfolio can be created as part of the stack using the construct's constructor.
+
+```ts
+new Portfolio(this, 'MyFirstPortfolio', {
+  displayName: 'MyFirstPortfolioDisplayName', 
+  providerName: 'MyTeam'
+});
+```
