@@ -1,8 +1,11 @@
+/* eslint-disable */
+
 import * as iam from '@aws-cdk/aws-iam';
 import { IResource, Resource, Tag, Stack } from '@aws-cdk/core';
 import { Construct } from 'constructs';
+import { LaunchNotificationConstraintProps, LaunchRoleConstraintProps, LaunchTemplateConstraintProps, ResourceUpdateConstraintProps, StackSetConstraintProps } from './constraints';
 import { IProduct } from './product';
-import { CfnPortfolio, CfnPortfolioPrincipalAssociation, CfnPortfolioProductAssociation, CfnPortfolioShare } from './servicecatalog.generated';
+import { CfnLaunchNotificationConstraint, CfnLaunchRoleConstraint, CfnLaunchTemplateConstraint, CfnPortfolio, CfnPortfolioPrincipalAssociation, CfnPortfolioProductAssociation, CfnPortfolioShare, CfnResourceUpdateConstraint, CfnStackSetConstraint } from './servicecatalog.generated';
 
 /**
  * A Service Catalog portfolio
@@ -43,9 +46,34 @@ export interface IPortfolio extends IResource {
   associateProduct(product: IProduct): void;
 
   /**
-   * Share portfolio with anohter account
+   * Share portfolio with another account
    */
   share(accountId: string, shareTagOptions?: boolean, acceptLanguage?: AcceptLanguage): void;
+
+  /**
+   * Add Launch Notification Constraint
+   */
+  addLaunchNotificationConstraint(launchNotificationConstraintProps: LaunchNotificationConstraintProps): void;
+
+  /**
+   * Add Launch Role Constraint
+   */
+  addLaunchRoleConstraint(launchRoleConstraintProps: LaunchRoleConstraintProps): void;
+
+  /**
+  * Add Launch Template Constraint
+  */
+  addLaunchTemplateConstraint(launchTemplateConstraintProps: LaunchTemplateConstraintProps): void;
+
+  /**
+  * Add Resource Update Constraint
+  */
+  addResourceUpdateConstraint(resourceUpdateConstraintProps: ResourceUpdateConstraintProps): void;
+
+  /**
+  * Add Stack Set Constraint
+  */
+  addStackSetConstraint(stackSetConstraintProps: StackSetConstraintProps): void;
 }
 
 
@@ -86,7 +114,7 @@ abstract class PortfolioBase extends Resource implements IPortfolio {
   /**
   * Associate principal to portfolio
   */
-  public associatePrincipal(principal: iam.IRole, principalType:PrincipalType=PrincipalType.IAM) {
+  public associatePrincipal(principal: iam.IRole, principalType: PrincipalType = PrincipalType.IAM) {
     new CfnPortfolioPrincipalAssociation(this, 'PortfolioPrincipalAssociation', {
       portfolioId: this.id,
       principalArn: principal.roleArn,
@@ -116,6 +144,59 @@ abstract class PortfolioBase extends Resource implements IPortfolio {
     });
   }
 
+  public addLaunchNotificationConstraint(launchNotificationConstraintProps: LaunchNotificationConstraintProps) {
+    new CfnLaunchNotificationConstraint(this, 'LaunchNotificationConstraint', {
+      acceptLanguage: launchNotificationConstraintProps.acceptLanguage || 'en',
+      description: launchNotificationConstraintProps.description,
+      portfolioId: this.id,
+      productId: launchNotificationConstraintProps.product.id,
+      notificationArns: launchNotificationConstraintProps.notificationArns
+    });
+  }
+
+  public addLaunchRoleConstraint(launchRoleConstraintProps: LaunchRoleConstraintProps) {
+    new CfnLaunchRoleConstraint(this, 'LaunchRoleConstraint', {
+      acceptLanguage: launchRoleConstraintProps.acceptLanguage || 'en',
+      description: launchRoleConstraintProps.description || '',
+      portfolioId: this.id,
+      productId: launchRoleConstraintProps.product.id,
+      roleArn: launchRoleConstraintProps.role.roleArn
+    });
+  }
+
+  public addLaunchTemplateConstraint(launchTemplateConstraintProps: LaunchTemplateConstraintProps) {
+    new CfnLaunchTemplateConstraint(this, 'LaunchTemplateConstraint', {
+      acceptLanguage: launchTemplateConstraintProps.acceptLanguage || 'en',
+      description: launchTemplateConstraintProps.description || '',
+      portfolioId: this.id,
+      productId: launchTemplateConstraintProps.product.id,
+      rules: JSON.stringify(launchTemplateConstraintProps.rules?._toCloudFormation()) || '{}'
+    });
+  }
+
+  public addResourceUpdateConstraint(resourceUpdateConstraintProps: ResourceUpdateConstraintProps) {
+    new CfnResourceUpdateConstraint(this, 'ResourceUpdateConstraint', {
+      acceptLanguage: resourceUpdateConstraintProps.acceptLanguage || 'en',
+      description: resourceUpdateConstraintProps.description || '',
+      portfolioId: this.id,
+      productId: resourceUpdateConstraintProps.product.id,
+      tagUpdateOnProvisionedProduct: resourceUpdateConstraintProps.tagUpdateOnProvisionedProductAllowed === false ? "NOT_ALLOWED" : "ALLOWED"
+    });
+  }
+
+  public addStackSetConstraint(stackSetConstraintProps: StackSetConstraintProps) {
+    new CfnStackSetConstraint(this, 'StackSetConstraint', {
+      acceptLanguage: stackSetConstraintProps.acceptLanguage || 'en',
+      description: stackSetConstraintProps.description || '',
+      portfolioId: this.id,
+      productId: stackSetConstraintProps.product.id,
+      accountList: stackSetConstraintProps.accountList,
+      regionList: stackSetConstraintProps.regionList,
+      adminRole: stackSetConstraintProps.adminRole.roleArn,
+      executionRole: stackSetConstraintProps.adminRole.roleName,
+      stackInstanceControl: stackSetConstraintProps.stackInstanceControlAllowed === false ? "NOT_ALLOWED" : "ALLOWED"
+    });
+  }
 }
 
 /**
@@ -252,8 +333,8 @@ export enum AcceptLanguage {
  * Only supported version currently is IAM
  */
 export enum PrincipalType {
-/**
- * IAM
- */
-  IAM ='IAM'
+  /**
+   * IAM
+   */
+  IAM = 'IAM'
 }

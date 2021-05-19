@@ -1,3 +1,4 @@
+export * from './constraints';
 export * from './portfolio';
 export * from './product';
 
