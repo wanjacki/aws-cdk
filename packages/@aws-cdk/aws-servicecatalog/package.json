@@ -97,11 +97,9 @@
   "awslint": {
     "exclude": [
       "props-physical-name:@aws-cdk/aws-servicecatalog.ProductProps",
-      "props-physical-name:@aws-cdk/aws-servicecatalog.PortfolioProps",
       "resource-attribute:@aws-cdk/aws-servicecatalog.Product.cloudFormationProductProductName",
       "resource-attribute:@aws-cdk/aws-servicecatalog.Product.cloudFormationProductProvisioningArtifactIds",
-      "resource-attribute:@aws-cdk/aws-servicecatalog.Product.cloudFormationProductProvisioningArtifactNames",
-      "ref-via-interface:@aws-cdk/aws-servicecatalog.IPortfolio.associateProduct.product"
+      "resource-attribute:@aws-cdk/aws-servicecatalog.Product.cloudFormationProductProvisioningArtifactNames"
     ]
   },
   "awscdkio": {

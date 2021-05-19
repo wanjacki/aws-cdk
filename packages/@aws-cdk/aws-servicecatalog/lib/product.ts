@@ -176,10 +176,6 @@ export class Product extends ProductBase {
         super(scope,id, {}
         );
 
-
-
-
-  
       this.product = new CfnCloudFormationProduct(this, 'Resource', {
         acceptLanguage: props.acceptLanguage,
         description: props.description,
@@ -194,16 +190,11 @@ export class Product extends ProductBase {
         tags: props.tags
     
       });
-  
+
       this.name = this.getResourceNameAttribute(props.name);
       this.id = this.getResourceNameAttribute(this.product.ref);
 
-
-
     }
-
-    
-
 
     private generateProvisioningArtifactParameters(props: ProductProps): any[] {
     return props.provisioningArtifacts.map(pa => {

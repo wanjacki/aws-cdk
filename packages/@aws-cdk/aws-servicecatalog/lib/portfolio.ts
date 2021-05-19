@@ -1,8 +1,8 @@
 import * as iam from '@aws-cdk/aws-iam';
 import { IResource, Resource, Tag, Stack } from '@aws-cdk/core';
 import { Construct } from 'constructs';
-import { Product } from './product';
-import { CfnPortfolio, CfnPortfolioPrincipalAssociation, CfnCloudFormationProduct, CfnPortfolioProductAssociation } from './servicecatalog.generated';
+import { IProduct } from './product';
+import { CfnPortfolio, CfnPortfolioPrincipalAssociation, CfnPortfolioProductAssociation, CfnPortfolioShare } from './servicecatalog.generated';
 
 /**
  * A Service Catalog portfolio
@@ -40,7 +40,12 @@ export interface IPortfolio extends IResource {
   /**
    * Associate portfolio with the given product
    */
-  associateProduct(product: CfnCloudFormationProduct | Product): void;
+  associateProduct(product: IProduct): void;
+
+  /**
+   * Share portfolio with anohter account
+   */
+  share(accountId: string, shareTagOptions?: boolean, acceptLanguage?: AcceptLanguage): void;
 }
 
 
@@ -77,6 +82,10 @@ abstract class PortfolioBase extends Resource implements IPortfolio {
   */
   public abstract readonly portfolioName: string;
 
+
+  /**
+  * Associate principal to portfolio
+  */
   public associatePrincipal(principal: iam.IRole, principalType:PrincipalType=PrincipalType.IAM) {
     new CfnPortfolioPrincipalAssociation(this, 'PortfolioPrincipalAssociation', {
       portfolioId: this.id,
@@ -85,10 +94,25 @@ abstract class PortfolioBase extends Resource implements IPortfolio {
     });
   }
 
-  public associateProduct(product: CfnCloudFormationProduct | Product) {
+  /**
+  * Associate product to portfolio
+  */
+  public associateProduct(product: IProduct) {
     new CfnPortfolioProductAssociation(this, 'PortfolioProductAssociation', {
       portfolioId: this.id,
-      productId: (product instanceof CfnCloudFormationProduct? product.ref: product.id),
+      productId: product.id,
+    });
+  }
+
+  /**
+  * Share the portfolio with a designated account
+  */
+  public share(accountId: string, shareTagOptions?: boolean, acceptLanguage?: AcceptLanguage) {
+    new CfnPortfolioShare(this, 'PortfolioShare', {
+      portfolioId: this.id,
+      accountId: accountId,
+      shareTagOptions: shareTagOptions,
+      acceptLanguage: acceptLanguage,
     });
   }
 
@@ -102,7 +126,7 @@ export interface PortfolioProps {
      * Enforces a particular physical stream name.
      * @default <generated>
      */
-  readonly displayName: string;
+  readonly portfolioName: string;
 
   /**
      * The providerName
@@ -112,7 +136,7 @@ export interface PortfolioProps {
 
   /**
      * The accept language
-     * @default - AcceptLanguage.EN
+     * @default
      */
   readonly acceptLanguage?: AcceptLanguage;
 
@@ -174,17 +198,16 @@ export class Portfolio extends PortfolioBase {
 
   private readonly portfolio: CfnPortfolio;
 
-
   constructor(scope: Construct, id: string, props: PortfolioProps) {
     super(scope, id, {
-      physicalName: props.displayName,
+      physicalName: props.portfolioName,
     });
-    
 
-    const acceptLanguage = this.parseAcceptLanguage(props);
+    // Check if language is defined and/or valid
+    const acceptLanguage = props.acceptLanguage || undefined;
 
     this.portfolio = new CfnPortfolio(this, 'Resource', {
-      displayName: props.displayName,
+      displayName: props.portfolioName,
       providerName: props.providerName,
       description: props.description,
       tags: props.tags,
@@ -197,22 +220,10 @@ export class Portfolio extends PortfolioBase {
       resourceName: this.physicalName,
     });
 
-    this.portfolioName = this.getResourceNameAttribute(props.displayName);
+    this.portfolioName = this.getResourceNameAttribute(props.portfolioName);
     this.id = this.getResourceNameAttribute(this.portfolio.ref);
 
   }
-
-  private parseAcceptLanguage(props: PortfolioProps) {
-    if (props.acceptLanguage == undefined) {
-      return undefined
-    }
-    if (props.acceptLanguage in AcceptLanguage) {
-    return props.acceptLanguage;
-    } else {
-      throw new Error(`Unexpected 'acceptLanguage': ${props.acceptLanguage}`);
-    }
-  }
-
 
 }
 
