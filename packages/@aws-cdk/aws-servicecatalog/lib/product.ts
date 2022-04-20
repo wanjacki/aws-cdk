@@ -1,9 +1,11 @@
+import * as fs from 'fs';
 import { ArnFormat, IResource, Resource, Stack } from '@aws-cdk/core';
 import { Construct } from 'constructs';
 import { CloudFormationTemplate } from './cloudformation-template';
-import { MessageLanguage } from './common';
+import { MessageLanguage, TemplateType } from './common';
 import { AssociationManager } from './private/association-manager';
 import { InputValidator } from './private/validation';
+import { ProductDetail } from './product-stack';
 import { CfnCloudFormationProduct } from './servicecatalog.generated';
 import { TagOptions } from './tag-options';
 
@@ -66,7 +68,21 @@ export interface CloudFormationProductVersion {
    * The name of the product version.
    * @default - No product version name provided
    */
-  readonly productVersionName?: string;
+  readonly productVersionName: string;
+
+  /**
+   * Additional productVersions to deploy from context file.
+   * @default empty
+   */
+
+  readonly additionalVersionsFromContext?: string[];
+
+  /**
+   * Whether to overwrite existing version in context and deploy.
+   * If turned off, changes are only deployed when a new version is set.
+   * @default true
+   */
+  readonly overwriteExistingVersion?: boolean;
 }
 
 /**
@@ -204,19 +220,133 @@ export class CloudFormationProduct extends Product {
 
   private renderProvisioningArtifacts(
     props: CloudFormationProductProps): CfnCloudFormationProduct.ProvisioningArtifactPropertiesProperty[] {
-    return props.productVersions.map(productVersion => {
+    let productVersions: CfnCloudFormationProduct.ProvisioningArtifactPropertiesProperty[] = [];
+    let cachedVersionMap = new Map<string, ProductDetail>();
+    let defaultBucketMap = new Map<string, string>();
+    let deployedProductVersions = new Set<string>();;
+    for (const productVersion of props.productVersions) {
       const template = productVersion.cloudFormationTemplate.bind(this);
-      InputValidator.validateUrl(this.node.path, 'provisioning template url', template.httpUrl);
-      return {
-        name: productVersion.productVersionName,
-        description: productVersion.description,
-        disableTemplateValidation: productVersion.validateTemplate === false ? true : false,
-        info: {
-          LoadTemplateFromURL: template.httpUrl,
-        },
-      };
-    });
+      if (template.productDetail != undefined) {
+        template.productDetail.setProductName(props.productName);
+        template.productDetail.setProductVersionName(productVersion.productVersionName);
+      }
+      switch (template.templateType) {
+        case TemplateType.CONTEXT:
+          if (template.productDetail != undefined) {
+            cachedVersionMap.set(productVersion.productVersionName, template?.productDetail);
+          }
+          break;
+        case TemplateType.PRODUCT_STACK:
+          if (productVersion.description != undefined) {
+            template.productDetail?.setProductDescription(productVersion.description);
+          }
+          if (productVersion.validateTemplate != undefined) {
+            template.productDetail?.setValidateTemplate(productVersion.validateTemplate);
+          };
+          if (template.productDetail?.getBucketName()) {
+            defaultBucketMap.set(template.productDetail?.productStackId, template.productDetail?.getBucketName());
+          }
+          InputValidator.validateUrl(this.node.path, 'provisioning template url', template.httpUrl);
+          if (productVersion.overwriteExistingVersion == false
+              && template.productDetail !== undefined
+              && this.existInContextFile(template.productDetail)) {
+            template.productDetail.setOverwriteExistingVersion(productVersion.overwriteExistingVersion);
+            cachedVersionMap.set(productVersion.productVersionName, template.productDetail);
+          } else {
+            productVersions.push(
+              {
+                name: productVersion.productVersionName,
+                description: productVersion.description,
+                disableTemplateValidation: productVersion.validateTemplate === false ? true : false,
+                info: {
+                  LoadTemplateFromURL: template.httpUrl,
+                },
+              },
+            );
+            deployedProductVersions.add(productVersion.productVersionName);
+          }
+          break;
+        default:
+          InputValidator.validateUrl(this.node.path, 'provisioning template url', template.httpUrl);
+          productVersions.push(
+            {
+              name: productVersion.productVersionName,
+              description: productVersion.description,
+              disableTemplateValidation: productVersion.validateTemplate === false ? true : false,
+              info: {
+                LoadTemplateFromURL: template.httpUrl,
+              },
+            },
+          );
+          deployedProductVersions.add(productVersion.productVersionName);
+      }
+    }
+    const cachedProductVersions = this.getCachedProductVersions(defaultBucketMap, cachedVersionMap, deployedProductVersions);
+    productVersions.push.apply(productVersions, cachedProductVersions);
+    return productVersions;
   };
+
+  private getCachedProductVersions(defaultBucketMap: Map<string, string>,
+    cachedVersionMap: Map<string, ProductDetail>, deployedProductVersions: Set<string>) :
+    CfnCloudFormationProduct.ProvisioningArtifactPropertiesProperty[] {
+    let productVersions: CfnCloudFormationProduct.ProvisioningArtifactPropertiesProperty[] = [];
+    const contextFileName = 'cdk.context.json';
+    if (fs.existsSync(contextFileName)) {
+      const contextJson = fs.readFileSync(contextFileName);
+      const contextJsonMap = JSON.parse(contextJson.toString());
+      if (contextJsonMap.autoVersioningMap == undefined) {
+        return productVersions;
+      }
+      for (let [productVersionName, productDetail] of cachedVersionMap) {
+        if (!defaultBucketMap.has(productDetail.productStackId)) {
+          throw new Error (`No base ProductStack found for ${productDetail.productStackId}`);
+        }
+        if (deployedProductVersions.has(productVersionName)) {
+          throw new Error (`Duplicate product version found for ${productVersionName}`);
+        }
+        // let assetBucketName = cdk.DefaultStackSynthesizer.DEFAULT_FILE_ASSETS_BUCKET_NAME;
+        // assetBucketName = assetBucketName.replace(/\${AWS::AccountId}/g, cdk.Stack.of(this).account);
+        // assetBucketName = assetBucketName.replace(/\${AWS::Region}/g, cdk.Stack.of(this).region);
+        // assetBucketName = assetBucketName.replace(/\${Qualifier}/g, cdk.DefaultStackSynthesizer.DEFAULT_QUALIFIER);
+        // if (productVersionName == productVersion.productVersionName) {
+        //   throw new Error(`Base Product Version ${productVersionName} found in additionalVersionsFromContext`);
+        // }
+        if (contextJsonMap.autoVersioningMap[productDetail.productName][productDetail.productStackId][productVersionName] == undefined) {
+          throw new Error(`Product Version ${productVersionName} not found in context`);
+        }
+        const productDetails = contextJsonMap.autoVersioningMap[productDetail.productName][productDetail.productStackId][productVersionName];
+        const httpUrl = `https://${defaultBucketMap.get(productDetail.productStackId)}.s3.amazonaws.com/assets/${productDetails.templateHash}.json`;
+        InputValidator.validateUrl(this.node.path, 'provisioning template url', httpUrl);
+        productVersions.push(
+          {
+            name: productVersionName,
+            description: productDetail.productDescription,
+            disableTemplateValidation: productDetail.validateTemplate === false ? true : false,
+            info: {
+              LoadTemplateFromURL: httpUrl,
+            },
+          },
+        );
+        deployedProductVersions.add(productVersionName);
+      }
+    }
+    return productVersions;
+  }
+
+  private existInContextFile(productDetail: ProductDetail) : boolean {
+    const contextFileName = 'cdk.context.json';
+    if (fs.existsSync(contextFileName)) {
+      const contextJson = fs.readFileSync(contextFileName);
+      const contextJsonMap = JSON.parse(contextJson.toString());
+      if (contextJsonMap.autoVersioningMap[productDetail.productName][productDetail.productStackId][productDetail.productVersionName] == undefined ) {
+        return false;
+      } else {
+        return true;
+      }
+    } else {
+      return false;
+    }
+  }
 
   private validateProductProps(props: CloudFormationProductProps) {
     InputValidator.validateLength(this.node.path, 'product product name', 1, 100, props.productName);

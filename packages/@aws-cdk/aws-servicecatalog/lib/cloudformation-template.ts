@@ -1,10 +1,11 @@
 import * as s3_assets from '@aws-cdk/aws-s3-assets';
-import { hashValues } from './private/util';
-import { ProductStack } from './product-stack';
+import {hashValues} from './private/util';
+import {ProductDetail, ProductStack} from './product-stack';
 
 // keep this import separate from other imports to reduce chance for merge conflicts with v2-main
 // eslint-disable-next-line no-duplicate-imports, import/order
-import { Construct } from '@aws-cdk/core';
+import {Construct} from '@aws-cdk/core';
+import {TemplateType} from "./common";
 
 /**
  * Represents the Product Provisioning Artifact Template.
@@ -35,6 +36,13 @@ export abstract class CloudFormationTemplate {
   }
 
   /**
+   * Creates a product with the resources defined in the given product stack.
+   */
+  public static fromContextFile(baseProductStackId: string): CloudFormationTemplate {
+    return new CloudFormationContextTemplate(baseProductStackId);
+  }
+
+  /**
    * Called when the product is initialized to allow this object to bind
    * to the stack, add resources and have fun.
    *
@@ -51,7 +59,15 @@ export interface CloudFormationTemplateConfig {
   /**
     * The http url of the template in S3.
     */
-  readonly httpUrl: string;
+  readonly httpUrl: string | undefined;
+  /**
+   * The productDetail
+   */
+  productDetail?: ProductDetail;
+  /**
+   * The productStackId
+   */
+  templateType: TemplateType;
 }
 
 /**
@@ -65,6 +81,7 @@ class CloudFormationUrlTemplate extends CloudFormationTemplate {
   public bind(_scope: Construct): CloudFormationTemplateConfig {
     return {
       httpUrl: this.url,
+      templateType: TemplateType.URL,
     };
   }
 }
@@ -93,6 +110,7 @@ class CloudFormationAssetTemplate extends CloudFormationTemplate {
 
     return {
       httpUrl: this.asset.httpUrl,
+      templateType: TemplateType.ASSET,
     };
   }
 }
@@ -110,7 +128,29 @@ class CloudFormationProductStackTemplate extends CloudFormationTemplate {
 
   public bind(_scope: Construct): CloudFormationTemplateConfig {
     return {
+      productDetail: this.productStack._getProductDetail(),
       httpUrl: this.productStack._getTemplateUrl(),
+      templateType: TemplateType.PRODUCT_STACK,
+    };
+  }
+}
+
+/**
+ * Template from a context file.
+ */
+class CloudFormationContextTemplate extends CloudFormationTemplate {
+  /**
+   * @param stack A service catalog context.
+   */
+  constructor(public readonly baseProductStackId: string) {
+    super();
+  }
+
+  public bind(_scope: Construct): CloudFormationTemplateConfig {
+    return {
+      httpUrl: '',
+      templateType: TemplateType.CONTEXT,
+      productDetail: new ProductDetail(this.baseProductStackId),
     };
   }
 }

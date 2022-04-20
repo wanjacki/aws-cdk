@@ -19,3 +19,25 @@ export enum MessageLanguage {
    */
   ZH = 'zh'
 }
+
+export enum TemplateType {
+  /**
+   * AssetTemplate
+   */
+  ASSET = 'AssetTemplate',
+
+  /**
+   * UrlTemplate
+   */
+  URL = 'UrlTemplate',
+
+  /**
+   * ProductStackTemplate
+   */
+  PRODUCT_STACK = 'ProductStackTemplate',
+
+  /**
+   * ContextTemplate
+   */
+  CONTEXT = 'ContextTemplate'
+}

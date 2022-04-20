@@ -8,6 +8,49 @@ import { ProductStackSynthesizer } from './private/product-stack-synthesizer';
 // eslint-disable-next-line no-duplicate-imports, import/order
 import { Construct } from 'constructs';
 
+export class ProductDetail {
+  public bucketName?: string;
+  public productStackId: string;
+  public productName: string;
+  public productVersionName: string;
+  public productDescription: string;
+  public validateTemplate: boolean;
+  public overwriteExistingVersion: boolean;
+
+  constructor(productStackId: string) {
+    this.productStackId = productStackId;
+    this.productName = '';
+    this.productVersionName = '';
+    this.productDescription = '';
+    this.validateTemplate = true;
+    this.overwriteExistingVersion = true;
+  }
+
+  public getBucketName(): string {
+    return cdk.Lazy.uncachedString({ produce: () => this.bucketName });
+  }
+
+  public setBucketName(bucketName: string) {
+    this.bucketName = bucketName;
+  }
+
+  public setProductName(productName: string) {
+    this.productName = productName;
+  }
+  public setProductVersionName(productVersionName: string) {
+    this.productVersionName = productVersionName;
+  }
+  public setProductDescription(productDescription: string) {
+    this.productDescription = productDescription;
+  }
+  public setValidateTemplate(validateTemplate: boolean) {
+    this.validateTemplate = validateTemplate;
+  }
+  public setOverwriteExistingVersion(setOverwriteExistingVersion: boolean) {
+    this.overwriteExistingVersion = setOverwriteExistingVersion;
+  }
+}
+
 /**
  * A Service Catalog product stack, which is similar in form to a Cloudformation nested stack.
  * You can add the resources to this stack that you want to define for your service catalog product.
@@ -19,6 +62,7 @@ import { Construct } from 'constructs';
  */
 export class ProductStack extends cdk.Stack {
   public readonly templateFile: string;
+  private readonly _productDetail: ProductDetail;
   private _templateUrl?: string;
   private _parentStack: cdk.Stack;
 
@@ -28,9 +72,20 @@ export class ProductStack extends cdk.Stack {
     });
 
     this._parentStack = findParentStack(scope);
+    this._productDetail = new ProductDetail(id);
 
     // this is the file name of the synthesized template file within the cloud assembly
-    this.templateFile = `${cdk.Names.uniqueId(this)}.product.template.json`;
+    const uniqueId = `${cdk.Names.uniqueId(this)}`;
+    this.templateFile = `${uniqueId}.product.template.json`;
+  }
+
+  /**
+   * Fetch the product details.
+   *
+   * @internal
+   */
+  public _getProductDetail(): ProductDetail | undefined {
+    return this._productDetail;
   }
 
   /**
@@ -54,13 +109,80 @@ export class ProductStack extends cdk.Stack {
     const cfn = JSON.stringify(this._toCloudFormation(), undefined, 2);
     const templateHash = crypto.createHash('sha256').update(cfn).digest('hex');
 
-    this._templateUrl = this._parentStack.synthesizer.addFileAsset({
+    const templateAssetParent = this._parentStack.synthesizer.addFileAsset({
       packaging: cdk.FileAssetPackaging.FILE,
       sourceHash: templateHash,
       fileName: this.templateFile,
-    }).httpUrl;
+    });
+
+    this._templateUrl = templateAssetParent.httpUrl;
+    this._productDetail.setBucketName(templateAssetParent.bucketName);
+
+    if (this._productDetail.overwriteExistingVersion != false) {
+      this.writeToContext(templateHash, this._productDetail);
+    }
 
     fs.writeFileSync(path.join(session.assembly.outdir, this.templateFile), cfn);
+  }
+
+  private writeToContext(templateHash: string, productDetail: ProductDetail) {
+    const contextFileName = 'cdk.context.json';
+    let contextJsonMap = {
+      autoVersioningMap: {
+        [productDetail.productName]: {
+          [productDetail.productStackId]: {
+            [productDetail.productVersionName]: {
+              templateHash: templateHash,
+              description: productDetail.productDescription,
+              validateTemplate: productDetail.validateTemplate,
+            },
+          },
+        },
+      },
+    };
+    if (fs.existsSync(contextFileName)) {
+      let contextJson = fs.readFileSync(contextFileName);
+      contextJsonMap = JSON.parse(contextJson.toString());
+      if (contextJsonMap.autoVersioningMap == undefined) {
+        contextJsonMap.autoVersioningMap = {
+          [productDetail.productName]: {
+            [productDetail.productStackId]: {
+              [productDetail.productVersionName]: {
+                templateHash: templateHash,
+                description: productDetail.productDescription,
+                validateTemplate: productDetail.validateTemplate,
+              },
+            },
+          },
+        };
+      } else if (contextJsonMap.autoVersioningMap[productDetail.productName] == undefined) {
+        contextJsonMap.autoVersioningMap[productDetail.productName] = {
+          [productDetail.productStackId]: {
+            [productDetail.productVersionName]: {
+              templateHash: templateHash,
+              description: productDetail.productDescription,
+              validateTemplate: productDetail.validateTemplate,
+            },
+          },
+        };
+      } else if (contextJsonMap.autoVersioningMap[productDetail.productName][productDetail.productStackId] == undefined) {
+        contextJsonMap.autoVersioningMap[productDetail.productName][productDetail.productStackId] = {
+          [productDetail.productVersionName]: {
+            templateHash: templateHash,
+            description: productDetail.productDescription,
+            validateTemplate: productDetail.validateTemplate,
+          },
+        };
+      } else {
+        contextJsonMap.autoVersioningMap[productDetail.productName][productDetail.productStackId][productDetail.productVersionName] = {
+          templateHash: templateHash,
+          description: productDetail.productDescription,
+          validateTemplate: productDetail.validateTemplate,
+        };
+      }
+    }
+    const contextJsonOutput = JSON.stringify(contextJsonMap);
+    fs.writeFileSync('cdk.context.json', contextJsonOutput);
   }
 }
 
