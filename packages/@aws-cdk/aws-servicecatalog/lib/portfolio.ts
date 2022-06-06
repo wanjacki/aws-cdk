@@ -1,4 +1,5 @@
 import * as iam from '@aws-cdk/aws-iam';
+import * as s3 from '@aws-cdk/aws-s3';
 import * as sns from '@aws-cdk/aws-sns';
 import * as cdk from '@aws-cdk/core';
 import { MessageLanguage } from './common';
@@ -16,6 +17,8 @@ import { TagOptions } from './tag-options';
 // keep this import separate from other imports to reduce chance for merge conflicts with v2-main
 // eslint-disable-next-line no-duplicate-imports, import/order
 import { Construct } from 'constructs';
+import * as kms from "@aws-cdk/aws-kms";
+import {Bucket} from "@aws-cdk/aws-s3";
 
 /**
  * Options for portfolio share.
@@ -157,7 +160,9 @@ export interface IPortfolio extends cdk.IResource {
 abstract class PortfolioBase extends cdk.Resource implements IPortfolio {
   public abstract readonly portfolioArn: string;
   public abstract readonly portfolioId: string;
+  public abstract readonly assetBucket?: Bucket;
   private readonly associatedPrincipals: Set<string> = new Set();
+  _sharedAssetLocation?: readonly string[];
 
   public giveAccessToRole(role: iam.IRole): void {
     this.associatePrincipal(role.roleArn, role.node.addr);
@@ -172,11 +177,17 @@ abstract class PortfolioBase extends cdk.Resource implements IPortfolio {
   }
 
   public addProduct(product: IProduct): void {
+    this._sharedAssetLocation = product._sharedAssetLocation;
     AssociationManager.associateProductWithPortfolio(this, product, undefined);
   }
 
   public shareWithAccount(accountId: string, options: PortfolioShareOptions = {}): void {
     const hashId = this.generateUniqueHash(accountId);
+    if (this.assetBucket) {
+      this.assetBucket.grantRead(
+        new iam.AccountPrincipal('465962516753'),
+      );
+    }
     new CfnPortfolioShare(this, `PortfolioShare${hashId}`, {
       portfolioId: this.portfolioId,
       accountId: accountId,
@@ -280,6 +291,13 @@ export interface PortfolioProps {
    * @default - No tagOptions provided
    */
   readonly tagOptions?: TagOptions
+
+  /**
+   * Bucket for storing assets.
+   *
+   * @default - No bucket provided
+   */
+  readonly assetBucket?: Bucket
 }
 
 /**
@@ -302,6 +320,7 @@ export class Portfolio extends PortfolioBase {
     }
 
     class Import extends PortfolioBase {
+      public assetBucket?: s3.Bucket;
       public readonly portfolioArn = portfolioArn;
       public readonly portfolioId = portfolioId!;
 
@@ -317,6 +336,7 @@ export class Portfolio extends PortfolioBase {
 
   public readonly portfolioArn: string;
   public readonly portfolioId: string;
+  public readonly assetBucket?: Bucket;
   private readonly portfolio: CfnPortfolio;
 
   constructor(scope: Construct, id: string, props: PortfolioProps) {
@@ -339,6 +359,7 @@ export class Portfolio extends PortfolioBase {
     if (props.tagOptions !== undefined) {
       this.associateTagOptions(props.tagOptions);
     }
+    this.assetBucket = props.assetBucket;
   }
 
   protected generateUniqueHash(value: string): string {

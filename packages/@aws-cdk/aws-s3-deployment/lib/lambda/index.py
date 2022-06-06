@@ -49,6 +49,7 @@ def handler(event, context):
             source_markers      = props.get('SourceMarkers', None)
             dest_bucket_name    = props['DestinationBucketName']
             dest_bucket_prefix  = props.get('DestinationBucketKeyPrefix', '')
+            unzip_file          = props.get('UnzipFile', 'true') == 'true'
             retain_on_delete    = props.get('RetainOnDelete', "true") == "true"
             distribution_id     = props.get('DistributionId', '')
             user_metadata       = props.get('UserMetadata', {})
@@ -113,7 +114,7 @@ def handler(event, context):
             aws_command("s3", "rm", old_s3_dest, "--recursive")
 
         if request_type == "Update" or request_type == "Create":
-            s3_deploy(s3_source_zips, s3_dest, user_metadata, system_metadata, prune, exclude, include, source_markers)
+            s3_deploy(s3_source_zips, s3_dest, user_metadata, system_metadata, prune, exclude, include, source_markers, unzip_file)
 
         if distribution_id:
             cloudfront_invalidate(distribution_id, distribution_paths)
@@ -130,7 +131,7 @@ def handler(event, context):
 
 #---------------------------------------------------------------------------------------------------
 # populate all files from s3_source_zips to a destination bucket
-def s3_deploy(s3_source_zips, s3_dest, user_metadata, system_metadata, prune, exclude, include, source_markers):
+def s3_deploy(s3_source_zips, s3_dest, user_metadata, system_metadata, prune, exclude, include, source_markers, unzip_file):
     # list lengths are equal
     if len(s3_source_zips) != len(source_markers):
         raise Exception("'source_markers' and 's3_source_zips' must be the same length")
@@ -154,27 +155,30 @@ def s3_deploy(s3_source_zips, s3_dest, user_metadata, system_metadata, prune, ex
             s3_source_zip = s3_source_zips[i]
             markers       = source_markers[i]
 
-            archive=os.path.join(workdir, str(uuid4()))
-            logger.info("archive: %s" % archive)
-            aws_command("s3", "cp", s3_source_zip, archive)
-            logger.info("| extracting archive to: %s\n" % contents_dir)
-            logger.info("| markers: %s" % markers)
-            extract_and_replace_markers(archive, contents_dir, markers)
+            if(unzip_file):
+                archive=os.path.join(workdir, str(uuid4()))
+                logger.info("archive: %s" % archive)
+                aws_command("s3", "cp", s3_source_zip, archive)
+                logger.info("| extracting archive to: %s\n" % contents_dir)
+                logger.info("| markers: %s" % markers)
+                extract_and_replace_markers(archive, contents_dir, markers)
+            else:
+                aws_command("s3", "cp", s3_source_zip, contents_dir)
 
         # sync from "contents" to destination
 
         s3_command = ["s3", "sync"]
 
         if prune:
-          s3_command.append("--delete")
+            s3_command.append("--delete")
 
         if exclude:
-          for filter in exclude:
-            s3_command.extend(["--exclude", filter])
+            for filter in exclude:
+                s3_command.extend(["--exclude", filter])
 
         if include:
-          for filter in include:
-            s3_command.extend(["--include", filter])
+            for filter in include:
+                s3_command.extend(["--include", filter])
 
         s3_command.extend([contents_dir, s3_dest])
         s3_command.extend(create_metadata_args(user_metadata, system_metadata))
@@ -187,18 +191,18 @@ def s3_deploy(s3_source_zips, s3_dest, user_metadata, system_metadata, prune, ex
 # invalidate files in the CloudFront distribution edge caches
 def cloudfront_invalidate(distribution_id, distribution_paths):
     invalidation_resp = cloudfront.create_invalidation(
-        DistributionId=distribution_id,
-        InvalidationBatch={
-            'Paths': {
-                'Quantity': len(distribution_paths),
-                'Items': distribution_paths
-            },
-            'CallerReference': str(uuid4()),
-        })
+            DistributionId=distribution_id,
+            InvalidationBatch={
+                'Paths': {
+                    'Quantity': len(distribution_paths),
+                    'Items': distribution_paths
+                },
+                'CallerReference': str(uuid4()),
+            })
     # by default, will wait up to 10 minutes
     cloudfront.get_waiter('invalidation_completed').wait(
-        DistributionId=distribution_id,
-        Id=invalidation_resp['Invalidation']['Id'])
+            DistributionId=distribution_id,
+            Id=invalidation_resp['Invalidation']['Id'])
 
 #---------------------------------------------------------------------------------------------------
 # set metadata
@@ -253,7 +257,7 @@ def cfn_send(event, context, responseStatus, responseData={}, physicalResourceId
     try:
         request = Request(responseUrl, method='PUT', data=bytes(body.encode('utf-8')), headers=headers)
         with contextlib.closing(urlopen(request)) as response:
-          logger.info("| status code: " + response.reason)
+            logger.info("| status code: " + response.reason)
     except Exception as e:
         logger.error("| unable to send response to CloudFormation")
         logger.exception(e)
@@ -268,7 +272,7 @@ def bucket_owned(bucketName, keyPrefix):
         tag = tag + ':' + keyPrefix
     try:
         request = s3.get_bucket_tagging(
-            Bucket=bucketName,
+                Bucket=bucketName,
         )
         return any((x["Key"].startswith(tag)) for x in request["TagSet"])
     except Exception as e:
@@ -285,7 +289,7 @@ def extract_and_replace_markers(archive, contents_dir, markers):
         for file in zip.namelist():
             file_path = os.path.join(contents_dir, file)
             if os.path.isdir(file_path): continue
-            replace_markers(file_path, markers)    
+            replace_markers(file_path, markers)
 
 def replace_markers(filename, markers):
     # convert the dict of string markers to binary markers

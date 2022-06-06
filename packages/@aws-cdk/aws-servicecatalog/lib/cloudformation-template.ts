@@ -52,6 +52,7 @@ export interface CloudFormationTemplateConfig {
     * The http url of the template in S3.
     */
   readonly httpUrl: string;
+  readonly _sharedAssetLocation?: readonly string[];
 }
 
 /**
@@ -111,6 +112,7 @@ class CloudFormationProductStackTemplate extends CloudFormationTemplate {
   public bind(_scope: Construct): CloudFormationTemplateConfig {
     return {
       httpUrl: this.productStack._getTemplateUrl(),
+      _sharedAssetLocation: this.productStack._getSharedAssetLocation(),
     };
   }
 }

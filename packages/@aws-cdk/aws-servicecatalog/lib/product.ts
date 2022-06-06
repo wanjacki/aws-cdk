@@ -28,6 +28,7 @@ export interface IProduct extends IResource {
    * A TagOption is a key-value pair managed in AWS Service Catalog.
    * It is not an AWS tag, but serves as a template for creating an AWS tag based on the TagOption.
    */
+  _sharedAssetLocation?: readonly string[];
   associateTagOptions(tagOptions: TagOptions): void;
 }
 
@@ -171,6 +172,7 @@ export abstract class Product extends ProductBase {
 export class CloudFormationProduct extends Product {
   public readonly productArn: string;
   public readonly productId: string;
+  public _sharedAssetLocation?: readonly string[]
 
   constructor(scope: Construct, id: string, props: CloudFormationProductProps) {
     super(scope, id);
@@ -206,6 +208,7 @@ export class CloudFormationProduct extends Product {
     props: CloudFormationProductProps): CfnCloudFormationProduct.ProvisioningArtifactPropertiesProperty[] {
     return props.productVersions.map(productVersion => {
       const template = productVersion.cloudFormationTemplate.bind(this);
+      this._sharedAssetLocation = template._sharedAssetLocation;
       InputValidator.validateUrl(this.node.path, 'provisioning template url', template.httpUrl);
       return {
         name: productVersion.productVersionName,

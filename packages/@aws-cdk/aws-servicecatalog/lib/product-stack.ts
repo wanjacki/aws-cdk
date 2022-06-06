@@ -1,7 +1,9 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Bucket } from '@aws-cdk/aws-s3';
 import * as cdk from '@aws-cdk/core';
+import { BucketDeployment, Source } from '@aws-cdk/aws-s3-deployment';
 import { ProductStackSynthesizer } from './private/product-stack-synthesizer';
 import { ProductStackHistory } from './product-stack-history';
 
@@ -23,6 +25,7 @@ export class ProductStack extends cdk.Stack {
   private _parentProductStackHistory?: ProductStackHistory;
   private _templateUrl?: string;
   private _parentStack: cdk.Stack;
+  private readonly _sharedAssetLocation: string[];
 
   constructor(scope: Construct, id: string) {
     super(scope, id, {
@@ -30,9 +33,9 @@ export class ProductStack extends cdk.Stack {
     });
 
     this._parentStack = findParentStack(scope);
-
     // this is the file name of the synthesized template file within the cloud assembly
     this.templateFile = `${cdk.Names.uniqueId(this)}.product.template.json`;
+    this._sharedAssetLocation = [];
   }
 
   /**
@@ -52,6 +55,35 @@ export class ProductStack extends cdk.Stack {
   public _getTemplateUrl(): string {
     return cdk.Lazy.uncachedString({ produce: () => this._templateUrl });
   }
+
+  public addFileAssetToParentSynthesizer(asset: cdk.FileAssetSource): cdk.FileAssetLocation {
+    const bucket = Bucket.fromBucketName(this._parentStack, 'SharableAssetBucket_' + asset.fileName, 'sc-sharable-asset-deployment-bucket');
+    const s3Prefix = 'assets';
+
+    //These values are hardcoded due to BucketDeployment unzipping asset
+    const assetPath = './cdk.out/' + asset.fileName;
+
+    new BucketDeployment(this._parentStack, 'Deploy_' + asset.fileName, {
+      sources: [Source.asset(assetPath)],
+      destinationBucket: bucket,
+      destinationKeyPrefix: s3Prefix,
+      unzipFile: false,
+    });
+
+    const bucketName = bucket.bucketName;
+    const s3Filename = asset.fileName?.split('.')[1] + '.zip';
+    const objectKey = `${s3Prefix}/${s3Filename}`;
+
+    const httpUrl = `https://s3.${bucketName}/${objectKey}`;
+    const s3ObjectUrl = `s3://${bucketName}/${objectKey}`;
+
+    return { bucketName, objectKey, httpUrl, s3ObjectUrl, s3Url: httpUrl };
+  }
+
+  public _getSharedAssetLocation(): ReadonlyArray<string> {
+    return this._sharedAssetLocation;
+  }
+
 
   /**
    * Synthesize the product stack template, overrides the `super` class method.
